@@ -1,0 +1,80 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: nextcloud
+  namespace: nextcloud
+spec:
+  chart: nextcloud
+  repo: https://nextcloud.github.io/helm/
+  targetNamespace: nextcloud
+  createNamespace: true
+  valuesContent: |-
+    ingress:
+      enabled: true
+      annotations:
+        cert-manager.io/cluster-issuer: cert-issuer
+      hosts:
+        - host: cal.ryzen.me
+          paths:
+            - path: /
+              pathType: Prefix
+      tls:
+        - secretName: nextcloud-tls
+          hosts:
+            - cal.ryzen.me
+    nextcloud:
+      host: cal.ryzen.me
+      extraEnv:
+        - name: OIDC_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: nextcloud-oidc-secret
+              key: CLIENT_SECRET
+        - name: OVERWRITEPROTOCOL
+          value: https
+      extraVolumes:
+        - name: oidc-config
+          configMap:
+            name: nextcloud-oidc-config
+      extraVolumeMounts:
+        - name: oidc-config
+          mountPath: /var/www/html/config/oidc.config.php
+          subPath: oidc.config.php
+    internalDatabase:
+      enabled: false
+    externalDatabase:
+      enabled: true
+      type: postgresql
+      existingSecret:
+        enabled: true
+        secretName: nextcloud-postgresql-app
+        usernameKey: username
+        passwordKey: password
+        hostKey: host
+        databaseKey: dbname
+    externalRedis:
+      enabled: true
+      host: nextcloud-redis-valkey
+    metrics:
+      enabled: true
+    cronjob:
+      enabled: true
+    persistence:
+      enabled: true
+      storageClass: retain
+    lifecycle:
+      postStart:
+        exec:
+          command:
+            - /bin/bash
+            - -c
+            - |
+              for i in {1..20}; do
+                if [ -f /var/www/html/config/config.php ]; then
+                  break
+                fi
+                sleep 5
+              done
+
+              php occ app:install oidc_login --keep-disabled --no-interaction
+              php occ app:enable oidc_login

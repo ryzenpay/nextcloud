@@ -1,0 +1,9 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: nextcloud-redis
+  namespace: nextcloud
+spec:
+  repo: https://valkey.io/valkey-helm/
+  chart: valkey
+  targetNamespace: nextcloud
